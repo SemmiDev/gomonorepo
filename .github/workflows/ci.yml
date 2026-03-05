@@ -62,7 +62,7 @@ jobs:
       # Matrix strategy memungkinkan kita test di beberapa Go version sekaligus.
       # Sangat berguna untuk memastikan code kita kompatibel dengan versi yang didukung.
       matrix:
-        go-version: ["1.22", "1.26"]
+        go-version: ["1.26"]
     steps:
       - uses: actions/checkout@v4
 
