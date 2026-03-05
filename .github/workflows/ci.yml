@@ -85,11 +85,13 @@ jobs:
         uses: golangci/golangci-lint-action@v6
         with:
           version: latest
+          install-mode: goinstall
           # Jalankan linter di semua service
           working-directory: services/user-svc
       - uses: golangci/golangci-lint-action@v6
         with:
           version: latest
+          install-mode: goinstall
           working-directory: services/order-svc
 
       - name: Run tests
