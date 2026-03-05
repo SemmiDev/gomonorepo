@@ -9,7 +9,7 @@
 # ── Konfigurasi Run ──────────────────────────────────────────────────────
 run:
   timeout: 5m # Timeout keseluruhan
-  go: "1.26"
+  go: "1.24"
   modules-download-mode: readonly # Jangan download module baru saat lint
 
 # ── Linters yang Diaktifkan ──────────────────────────────────────────────
