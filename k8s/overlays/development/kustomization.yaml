@@ -1,0 +1,164 @@
+# k8s/overlays/development/kustomization.yaml
+#
+# OVERLAY DEVELOPMENT — ini yang kamu pakai saat test di Docker Desktop Kubernetes.
+#
+# Overlay ini melakukan tiga hal utama yang membedakannya dari base:
+#
+# 1. IMAGE TAG OVERRIDE
+#    Base mengacu ke "ghcr.io/semmidev/.../user-svc:latest" (remote registry).
+#    Di development, kita build image secara lokal dengan tag "local".
+#    Kustomize "images" transformer mengubah image reference ini tanpa
+#    kita perlu edit YAML satuan per satuan.
+#
+# 2. REPLICA OVERRIDE (Patch)
+#    Base punya replicas: 2 (untuk HA di production).
+#    Di development, 1 replica cukup — hemat resource laptop kamu.
+#
+# 3. CONFIG OVERRIDE
+#    APP_ENV = "development" agar logger pakai format yang lebih readable.
+#
+# FILOSOFI: base adalah "production-like config" dan overlay development
+# adalah "modifikasi minimal agar bisa jalan di laptop."
+# Jangan terlalu banyak override — semakin dekat config dev ke production,
+# semakin sedikit "it works on my machine" surprises.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Extend dari base — semua resource di base akan di-include
+resources:
+  - ../../base
+
+# ── Image Overrides ──────────────────────────────────────────────────────
+# Kustomize akan mengganti image reference di SEMUA Deployment yang cocok.
+# Ini jauh lebih bersih daripada sed/awk untuk memodifikasi YAML.
+images:
+  - name: ghcr.io/semmidev/gomonorepo/user-svc
+    # newName: ganti registry (opsional, untuk pakai local registry)
+    newTag: local   # Tag yang kita pakai saat "docker build ... -t ...:local"
+
+  - name: ghcr.io/semmidev/gomonorepo/order-svc
+    newTag: local
+
+# ── Patches ──────────────────────────────────────────────────────────────
+# Strategic Merge Patch: kamu hanya perlu menulis field yang INGIN DIUBAH.
+# Field yang tidak disebutkan akan tetap seperti di base.
+# Ini seperti Object.assign() di JavaScript atau {**base, **override} di Python.
+patches:
+  # Patch 1: Kurangi replica ke 1 untuk menghemat resource di laptop
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: user-svc
+        namespace: gomonorepo
+      spec:
+        replicas: 1
+    target:
+      kind: Deployment
+      name: user-svc
+
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: order-svc
+        namespace: gomonorepo
+      spec:
+        replicas: 1
+    target:
+      kind: Deployment
+      name: order-svc
+
+  # Patch 2: Override ConfigMap user-svc untuk development settings
+  - patch: |-
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: user-svc-config
+        namespace: gomonorepo
+      data:
+        APP_ENV: "development"
+    target:
+      kind: ConfigMap
+      name: user-svc-config
+
+  # Patch 3: Override ConfigMap order-svc
+  - patch: |-
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: order-svc-config
+        namespace: gomonorepo
+      data:
+        APP_ENV: "development"
+    target:
+      kind: ConfigMap
+      name: order-svc-config
+
+  # Patch 4: Disable topologySpreadConstraints untuk single-node cluster.
+  # Docker Desktop hanya punya 1 node, jadi constraint "spread across nodes"
+  # tidak bisa dipenuhi dan akan membuat Pod stuck di state Pending.
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: user-svc
+        namespace: gomonorepo
+      spec:
+        template:
+          spec:
+            topologySpreadConstraints: []
+    target:
+      kind: Deployment
+      name: user-svc
+
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: order-svc
+        namespace: gomonorepo
+      spec:
+        template:
+          spec:
+            topologySpreadConstraints: []
+    target:
+      kind: Deployment
+      name: order-svc
+
+  # Patch 5: Tambahkan imagePullPolicy: Never untuk image lokal.
+  # Tanpa ini, Kubernetes akan mencoba pull image dari registry (yang tidak ada
+  # untuk tag "local"), dan deployment akan gagal dengan ImagePullBackOff.
+  # "Never" memberitahu Kubernetes: "jangan pull, gunakan image yang sudah ada di node."
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: user-svc
+        namespace: gomonorepo
+      spec:
+        template:
+          spec:
+            containers:
+              - name: user-svc
+                imagePullPolicy: Never
+    target:
+      kind: Deployment
+      name: user-svc
+
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: order-svc
+        namespace: gomonorepo
+      spec:
+        template:
+          spec:
+            containers:
+              - name: order-svc
+                imagePullPolicy: Never
+    target:
+      kind: Deployment
+      name: order-svc

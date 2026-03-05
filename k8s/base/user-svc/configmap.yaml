@@ -1,0 +1,39 @@
+# k8s/base/user-svc/configmap.yaml
+#
+# ConfigMap menyimpan konfigurasi non-sensitif sebagai key-value pairs.
+#
+# Filosofi 12-Factor App (#3: Config):
+# "Store config in the environment."
+# Konfigurasi yang berbeda antar environment (dev vs staging vs prod)
+# TIDAK boleh di-hardcode di source code atau image Docker.
+# Image Docker harus identik di semua environment — yang berbeda hanya config-nya.
+#
+# ConfigMap vs Secret:
+# - ConfigMap: untuk data yang aman jika dibaca (port, URL, flag)
+# - Secret: untuk data sensitif (password, API key, TLS cert)
+#
+# Cara ConfigMap digunakan oleh Deployment:
+# Di deployment.yaml, kita referensi ConfigMap dengan:
+#   env:
+#     - name: HTTP_PORT
+#       valueFrom:
+#         configMapKeyRef:
+#           name: user-svc-config  ← nama ConfigMap ini
+#           key: HTTP_PORT         ← key di dalam ConfigMap
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: user-svc-config
+  namespace: gomonorepo
+  labels:
+    app.kubernetes.io/name: user-svc
+    app.kubernetes.io/component: config
+data:
+  # Nilai-nilai ini akan di-inject sebagai environment variables ke container.
+  # Kustomize overlay bisa OVERRIDE nilai-nilai ini untuk environment yang berbeda.
+  HTTP_PORT: "8080"
+  GRPC_PORT: "9090"
+  APP_ENV: "production"
+  # LOG_LEVEL: "info"   ← Contoh config tambahan yang bisa kamu tambahkan
+  # TIMEOUT_SECS: "30"

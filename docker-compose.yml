@@ -1,0 +1,79 @@
+# docker-compose.yml
+#
+# Orkestrator lokal untuk menjalankan semua service bersamaan.
+# Analoginya: Docker Compose adalah "Kubernetes yang disederhanakan" untuk development.
+#
+# Jalankan dengan: make docker-up
+# Matikan dengan:  make docker-down
+#
+# Arsitektur jaringan yang dibuat:
+#   [client] ──HTTP──▶ [user-svc :8080] ──gRPC──▶ [user-svc gRPC :9090]
+#   [client] ──HTTP──▶ [order-svc :8081] ──gRPC──▶ [user-svc :9090]
+#
+# Semua service berada di network "gomonorepo-net" yang terisolasi.
+# Mereka bisa saling berkomunikasi menggunakan nama service sebagai hostname
+# (Docker built-in DNS). Contoh: order-svc bisa panggil user-svc di "user-svc:9090".
+
+services:
+
+  # ── user-svc ────────────────────────────────────────────────────────
+  user-svc:
+    build:
+      context: .          # Build context adalah ROOT monorepo (bukan dalam service folder)
+      dockerfile: services/user-svc/Dockerfile  # Path ke Dockerfile relatif dari context
+    container_name: gomonorepo-user-svc
+    ports:
+      - "8080:8080"   # HTTP REST API — accessible dari host machine
+      - "9090:9090"   # gRPC server — accessible dari host machine (untuk testing dengan grpcurl)
+    environment:
+      - HTTP_PORT=8080
+      - GRPC_PORT=9090
+      - APP_ENV=development
+    networks:
+      - gomonorepo-net
+    healthcheck:
+      # Docker akan cek endpoint ini secara berkala untuk tahu apakah service sehat.
+      # Jika health check gagal, Docker bisa restart container secara otomatis.
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/healthz"]
+      interval: 10s    # Cek setiap 10 detik
+      timeout: 5s      # Timeout per check
+      retries: 3       # Coba 3 kali sebelum declare "unhealthy"
+      start_period: 5s # Beri waktu 5 detik untuk startup sebelum mulai check
+    restart: unless-stopped  # Auto-restart jika crash, kecuali di-stop secara manual
+
+  # ── order-svc ───────────────────────────────────────────────────────
+  order-svc:
+    build:
+      context: .
+      dockerfile: services/order-svc/Dockerfile
+    container_name: gomonorepo-order-svc
+    ports:
+      - "8081:8081"   # HTTP REST API
+    environment:
+      - HTTP_PORT=8081
+      - APP_ENV=development
+      # USER_SVC_ADDR menggunakan nama service Docker sebagai hostname.
+      # Docker DNS akan resolve "user-svc" ke IP container user-svc.
+      # Port 9090 adalah gRPC port user-svc.
+      - USER_SVC_ADDR=user-svc:9090
+    networks:
+      - gomonorepo-net
+    depends_on:
+      user-svc:
+        condition: service_healthy  # Tunggu user-svc sehat sebelum start order-svc
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8081/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+# ── Networks ──────────────────────────────────────────────────────────
+networks:
+  gomonorepo-net:
+    # Bridge network: isolated network namespace untuk semua service kita.
+    # Service di dalam network ini bisa saling berkomunikasi,
+    # tapi tidak bisa diakses dari network lain kecuali melalui port yang di-expose.
+    driver: bridge
+    name: gomonorepo-net

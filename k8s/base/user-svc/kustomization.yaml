@@ -1,0 +1,22 @@
+# k8s/base/user-svc/kustomization.yaml
+#
+# File ini mendaftarkan semua resource yang termasuk dalam "user-svc" group.
+# Kustomize menggunakan file ini untuk tahu "resource apa saja yang harus
+# di-apply bersama saat kita deploy user-svc."
+#
+# Kustomize bekerja secara hierarkis:
+#   base/user-svc/kustomization.yaml  ← daftarkan resource base
+#       ↑ di-include oleh
+#   base/kustomization.yaml           ← gabungkan semua service
+#       ↑ di-extend oleh
+#   overlays/development/kustomization.yaml  ← override untuk dev
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - deployment.yaml
+  - service.yaml
+  - configmap.yaml
+  - hpa.yaml
+  - pdb.yaml

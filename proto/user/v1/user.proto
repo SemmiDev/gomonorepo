@@ -1,0 +1,81 @@
+// user/v1/user.proto
+//
+// Ini adalah "kontrak" antara semua service yang berinteraksi dengan User.
+// Filosofi penting: .proto files adalah SOURCE OF TRUTH untuk API kamu.
+// Dari satu file ini, Buf akan generate:
+//   - Go structs (untuk serialisasi/deserialisasi)
+//   - gRPC server interface (untuk user-svc mengimplementasikan)
+//   - gRPC client interface (untuk order-svc memanggil user-svc)
+//
+// Dengan pendekatan ini, TYPE SAFETY terjamin di seluruh service!
+
+syntax = "proto3";
+
+package user.v1;
+
+// go_package biasanya di-manage oleh buf managed mode,
+// tapi dituliskan di sini sebagai dokumentasi ke mana outputnya.
+option go_package = "github.com/semmidev/gomonorepo/gen/go/user/v1;userv1";
+
+// ═══════════════════════════════════════
+//  SERVICE DEFINITION
+// ═══════════════════════════════════════
+// Service = kumpulan RPC (Remote Procedure Call).
+// Analoginya seperti interface di Go: mendefinisikan "contract" tanpa implementasi.
+service UserService {
+  // GetUser: ambil satu user berdasarkan ID
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+
+  // ListUsers: ambil semua users (bisa dikembangkan dengan pagination)
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
+
+  // CreateUser: buat user baru
+  rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
+}
+
+// ═══════════════════════════════════════
+//  MESSAGE DEFINITIONS
+// ═══════════════════════════════════════
+// Setiap field memiliki "field number" (angka di belakang =).
+// Field number ini TIDAK BOLEH BERUBAH setelah production!
+// Ini yang membuat protobuf backward-compatible.
+// Proto3: semua field opsional secara default, tidak ada "required".
+
+message User {
+  string id    = 1;  // UUID string, bukan int agar aman di distributed system
+  string name  = 2;
+  string email = 3;
+  string role  = 4;  // "admin", "customer", dll.
+  int64  created_at = 5;  // Unix timestamp
+}
+
+// ── GetUser ──
+message GetUserRequest {
+  string id = 1;
+}
+
+message GetUserResponse {
+  User user = 1;
+}
+
+// ── ListUsers ──
+message ListUsersRequest {
+  // Kosong untuk sekarang. Di production, tambahkan:
+  // int32 page_size = 1;
+  // string page_token = 2;
+}
+
+message ListUsersResponse {
+  repeated User users = 1;  // "repeated" = slice di Go
+}
+
+// ── CreateUser ──
+message CreateUserRequest {
+  string name  = 1;
+  string email = 2;
+  string role  = 3;
+}
+
+message CreateUserResponse {
+  User user = 1;
+}

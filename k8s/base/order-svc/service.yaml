@@ -1,0 +1,18 @@
+# k8s/base/order-svc/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-svc
+  namespace: gomonorepo
+  labels:
+    app.kubernetes.io/name: order-svc
+    app.kubernetes.io/component: backend
+spec:
+  type: ClusterIP
+  selector:
+    app: order-svc
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP

@@ -1,0 +1,55 @@
+# k8s/base/user-svc/service.yaml
+#
+# Service memberikan "alamat stabil" untuk mengakses Pod.
+#
+# Masalah yang dipecahkan Service:
+# Pod bersifat ephemeral — mereka bisa mati dan lahir kembali kapan saja
+# dengan IP address yang berbeda-beda. Kalau order-svc hardcode IP Pod user-svc,
+# setiap kali Pod user-svc restart, order-svc harus di-update juga.
+#
+# Service memecahkan ini dengan memberikan:
+#   1. IP yang stabil (ClusterIP) yang tidak berubah selama Service hidup
+#   2. DNS name yang stabil: "user-svc.gomonorepo.svc.cluster.local"
+#      atau disingkat "user-svc" jika dalam namespace yang sama
+#   3. Load balancing otomatis ke semua Pod yang healthy (yang lulus readiness probe)
+#
+# Cara kerja Service (PENTING untuk dipahami):
+# Service tidak "berjalan" di server manapun. Dia adalah abstraksi yang
+# diimplementasikan oleh kube-proxy di setiap node menggunakan iptables atau IPVS rules.
+# Ketika ada request ke ClusterIP Service, iptables rules mem-forward-nya ke salah satu
+# Pod yang terdaftar secara round-robin.
+
+# ── Service untuk HTTP REST API ──────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-svc
+  namespace: gomonorepo
+  labels:
+    app.kubernetes.io/name: user-svc
+    app.kubernetes.io/component: backend
+spec:
+  # ClusterIP: Service hanya bisa diakses dari dalam cluster.
+  # Ini tipe yang paling aman untuk service internal.
+  # Tipe lain: NodePort (expose ke host), LoadBalancer (untuk cloud).
+  type: ClusterIP
+
+  # selector menentukan Pod mana yang menjadi "backend" Service ini.
+  # Kubernetes secara dinamis memperbarui daftar backend ini
+  # setiap kali Pod dengan label ini ditambah, dihapus, atau berubah status readiness-nya.
+  selector:
+    app: user-svc    # Cocokkan dengan label di Deployment template
+
+  ports:
+    # Port HTTP — untuk akses REST API dari dalam cluster atau via Ingress
+    - name: http
+      port: 80        # Port yang diekspose oleh Service (port yang di-dial oleh caller)
+      targetPort: http # Port di Pod yang dituju (referensi nama port di Deployment)
+      protocol: TCP
+
+    # Port gRPC — untuk komunikasi internal antar service
+    # order-svc akan connect ke "user-svc:9090" menggunakan Service ini
+    - name: grpc
+      port: 9090
+      targetPort: grpc
+      protocol: TCP

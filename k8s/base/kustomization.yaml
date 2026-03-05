@@ -1,0 +1,39 @@
+# k8s/base/kustomization.yaml
+#
+# Ini adalah "root" dari base layer Kustomize kita.
+# File ini menggabungkan semua resource dari semua service.
+#
+# ARSITEKTUR KUSTOMIZE:
+#
+#   base/                    ← Konfigurasi "default" yang berlaku di semua environment
+#   ├── kustomization.yaml   ← File ini
+#   ├── namespace.yaml
+#   ├── user-svc/
+#   └── order-svc/
+#
+#   overlays/
+#   ├── development/         ← Override untuk local development
+#   │   └── kustomization.yaml  ← extends base + patch khusus dev
+#   └── production/          ← Override untuk production
+#       └── kustomization.yaml  ← extends base + patch khusus prod
+#
+# Cara kerja Kustomize overlay:
+# Overlay "inherit" semua resource dari base, lalu menerapkan "patches"
+# untuk mengubah nilai tertentu TANPA menduplikasi seluruh YAML.
+# Bayangkan seperti CSS: base adalah stylesheet utama, overlay adalah
+# stylesheet override yang hanya mengubah properti yang perlu diubah.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# commonLabels ditambahkan ke SEMUA resource yang di-manage oleh kustomization ini.
+# Sangat berguna untuk filtering: kubectl get all -l app.kubernetes.io/part-of=gomonorepo
+commonLabels:
+  app.kubernetes.io/part-of: gomonorepo
+  app.kubernetes.io/managed-by: kustomize
+
+resources:
+  - namespace.yaml
+  - user-svc/
+  - order-svc/
+  - ingress/

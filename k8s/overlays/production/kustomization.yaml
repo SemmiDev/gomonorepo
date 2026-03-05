@@ -1,0 +1,76 @@
+# k8s/overlays/production/kustomization.yaml
+#
+# OVERLAY PRODUCTION — untuk deployment ke cluster sungguhan.
+#
+# Di production, kita ingin:
+#   1. Image dari registry resmi dengan tag yang spesifik (bukan "latest" atau "local"!)
+#      Tag "latest" berbahaya di production karena tidak deterministic.
+#      Kita pakai image digest (SHA) untuk build yang benar-benar reproducible.
+#   2. Replica lebih banyak untuk HA
+#   3. Resource requests/limits lebih besar
+#   4. HPA tetap aktif (tidak di-disable seperti development)
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+# Di production, pakai image dengan tag Git SHA yang spesifik.
+# Contoh: image di-build oleh CI dengan tag = git commit SHA.
+# JANGAN pakai "latest" di production — tidak bisa rollback dengan pasti!
+images:
+  - name: ghcr.io/semmidev/gomonorepo/user-svc
+    newTag: "abc1234"  # Ganti dengan Git SHA aktual saat deploy
+
+  - name: ghcr.io/semmidev/gomonorepo/order-svc
+    newTag: "abc1234"
+
+patches:
+  # Production: lebih banyak replica untuk HA dan traffic tinggi
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: user-svc
+        namespace: gomonorepo
+      spec:
+        replicas: 3
+    target:
+      kind: Deployment
+      name: user-svc
+
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: order-svc
+        namespace: gomonorepo
+      spec:
+        replicas: 3
+    target:
+      kind: Deployment
+      name: order-svc
+
+  # Production: resource lebih besar
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: user-svc
+        namespace: gomonorepo
+      spec:
+        template:
+          spec:
+            containers:
+              - name: user-svc
+                resources:
+                  requests:
+                    memory: "128Mi"
+                    cpu: "200m"
+                  limits:
+                    memory: "256Mi"
+                    cpu: "500m"
+    target:
+      kind: Deployment
+      name: user-svc

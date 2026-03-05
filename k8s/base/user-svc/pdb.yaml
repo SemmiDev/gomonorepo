@@ -1,0 +1,34 @@
+# k8s/base/user-svc/pdb.yaml
+#
+# PodDisruptionBudget (PDB) melindungi availability service saat ada
+# "disruption yang disengaja" (voluntary disruption) seperti:
+#   - Node di-drain untuk maintenance (kubectl drain node-1)
+#   - Cluster upgrade
+#   - Admin menghapus Node secara sengaja
+#
+# PENTING: PDB TIDAK melindungi dari involuntary disruption
+# (node crash, hardware failure, OOM kill) — itu bukan hal yang bisa dikontrol.
+#
+# Cara PDB bekerja:
+# Tanpa PDB: saat kamu drain sebuah node, Kubernetes bisa mengevict
+# SEMUA Pod di node itu sekaligus, termasuk semua replica user-svc.
+# Hasilnya: service down selama beberapa detik sampai Pod baru siap.
+#
+# Dengan PDB "minAvailable: 1": Kubernetes menjamin selalu ada
+# minimal 1 Pod user-svc yang running dan ready saat melakukan eviction.
+# Dia akan menunggu Pod baru ready sebelum mengevict Pod lama.
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: user-svc-pdb
+  namespace: gomonorepo
+spec:
+  # minAvailable: minimum Pod yang harus selalu available.
+  # Kita pilih "1" karena kita punya 2 replica.
+  # Alternatif: gunakan maxUnavailable: 1 (maksimal 1 Pod boleh tidak available)
+  # Keduanya ekuivalen untuk 2 replica, tapi minAvailable lebih intuitif.
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: user-svc

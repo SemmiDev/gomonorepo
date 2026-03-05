@@ -1,0 +1,18 @@
+# k8s/base/order-svc/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: order-svc-config
+  namespace: gomonorepo
+  labels:
+    app.kubernetes.io/name: order-svc
+    app.kubernetes.io/component: config
+data:
+  HTTP_PORT: "8081"
+  APP_ENV: "production"
+  # Di dalam Kubernetes cluster, service-to-service communication menggunakan
+  # DNS name dari Kubernetes Service. Format lengkapnya adalah:
+  # <service-name>.<namespace>.svc.cluster.local:<port>
+  # Tapi jika dalam namespace yang sama, cukup: <service-name>:<port>
+  # Di sini kita tunjuk ke Service "user-svc" port 9090 (gRPC port).
+  USER_SVC_ADDR: "user-svc:9090"

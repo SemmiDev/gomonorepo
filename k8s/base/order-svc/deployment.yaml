@@ -1,0 +1,109 @@
+# k8s/base/order-svc/deployment.yaml
+#
+# Deployment untuk order-svc. Strukturnya sangat mirip dengan user-svc —
+# itulah keuntungan monorepo dengan pola yang konsisten.
+#
+# Perbedaan kunci dari user-svc:
+#   1. Tidak ada port gRPC (order-svc adalah consumer gRPC, bukan provider)
+#   2. Ada env var USER_SVC_ADDR yang menunjuk ke Service user-svc
+#      Format: "user-svc:9090" — ini adalah DNS name dari Kubernetes Service!
+#      Kubernetes DNS secara otomatis meresolve "user-svc" ke ClusterIP Service user-svc.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-svc
+  namespace: gomonorepo
+  labels:
+    app.kubernetes.io/name: order-svc
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: gomonorepo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: order-svc
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: order-svc
+        version: "1.0.0"
+    spec:
+      terminationGracePeriodSeconds: 30
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: order-svc
+      containers:
+        - name: order-svc
+          image: ghcr.io/semmidev/gomonorepo/order-svc:latest
+          ports:
+            - name: http
+              containerPort: 8081
+              protocol: TCP
+          env:
+            - name: HTTP_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: order-svc-config
+                  key: HTTP_PORT
+            - name: APP_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: order-svc-config
+                  key: APP_ENV
+            - name: USER_SVC_ADDR
+              valueFrom:
+                configMapKeyRef:
+                  name: order-svc-config
+                  key: USER_SVC_ADDR
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "100m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 2
+            successThreshold: 1
+            timeoutSeconds: 3
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            failureThreshold: 30
+            periodSeconds: 2
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault

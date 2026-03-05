@@ -1,0 +1,35 @@
+# buf.gen.yaml - Konfigurasi CODE GENERATION untuk Buf
+# File ini menjawab pertanyaan: "Dari .proto files, generate kode apa dan ke mana?"
+#
+# Analoginya: buf.yaml adalah "compiler config", buf.gen.yaml adalah "output config"
+
+version: v2
+
+# "managed mode" = Buf secara otomatis mengatur options yang biasanya kamu tulis
+# berulang-ulang di setiap .proto file seperti go_package, java_package, dll.
+# Ini membuat .proto files kita tetap bersih dan tidak bercampur dengan config bahasa tertentu.
+managed:
+  enabled: true
+  override:
+    # Paksa semua generated Go files masuk ke package yang benar
+    - file_option: go_package_prefix
+      value: github.com/semmidev/gomonorepo/gen/go
+
+# Plugins = tools yang melakukan transformasi dari .proto -> kode
+plugins:
+  # Plugin 1: protoc-gen-go
+  # Menghasilkan Go structs untuk setiap message di .proto
+  # Contoh: message User {} -> type User struct { ... }
+  - remote: buf.build/protocolbuffers/go
+    out: ../gen/go  # Output relatif dari direktori proto/
+    opt:
+      - paths=source_relative  # Struktur folder output mengikuti struktur proto
+
+  # Plugin 2: protoc-gen-go-grpc
+  # Menghasilkan gRPC server & client interfaces
+  # Contoh: service UserService {} -> UserServiceClient, UserServiceServer interfaces
+  - remote: buf.build/grpc/go
+    out: ../gen/go
+    opt:
+      - paths=source_relative
+      - require_unimplemented_servers=true  # Best practice: paksa implement semua method

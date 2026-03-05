@@ -1,0 +1,24 @@
+# k8s/base/namespace.yaml
+#
+# Namespace adalah "folder virtual" di dalam cluster Kubernetes.
+# Semua resource kita (Deployment, Service, dll) akan hidup di dalam
+# namespace "gomonorepo" ini, terisolasi dari namespace lain.
+#
+# Kenapa namespace penting?
+# Bayangkan kamu punya satu cluster tapi untuk beberapa tim/project.
+# Tanpa namespace, semua resource bercampur jadi satu dan sulit di-manage.
+# Dengan namespace:
+#   - Resource terisolasi (resource di namespace A tidak bisa diakses dari namespace B, kecuali diizinkan)
+#   - Bisa set resource quota per namespace (misalnya: namespace "dev" max 4 CPU)
+#   - Bisa hapus semua resource sekaligus dengan: kubectl delete namespace gomonorepo
+#   - RBAC (Role-Based Access Control) bisa di-scope per namespace
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gomonorepo
+  labels:
+    # Label adalah key-value metadata yang bisa dipakai untuk filtering dan selection.
+    # Kita beri label "managed-by: kustomize" agar tahu siapa yang mengatur namespace ini.
+    app.kubernetes.io/managed-by: kustomize
+    environment: base

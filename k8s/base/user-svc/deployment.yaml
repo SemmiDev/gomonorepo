@@ -1,0 +1,203 @@
+# k8s/base/user-svc/deployment.yaml
+#
+# Deployment adalah "deklarasi niat" kamu ke Kubernetes:
+# "Aku mau selalu ada 2 instance user-svc yang jalan, dengan image ini,
+# dan kalau salah satunya mati, tolong restart otomatis."
+#
+# Kubernetes menggunakan RECONCILIATION LOOP: dia terus-menerus membandingkan
+# "desired state" (apa yang kamu tulis di sini) dengan "actual state"
+# (apa yang benar-benar jalan di cluster). Jika berbeda, Kubernetes
+# otomatis mengambil tindakan untuk menyamakan keduanya.
+#
+# Ini adalah "self-healing" — konsep fundamental Kubernetes.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-svc
+  namespace: gomonorepo
+  labels:
+    # Label standar Kubernetes (https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/)
+    # Ini bukan hanya estetika — label digunakan oleh Service selector, monitoring tools (Prometheus),
+    # dan Dashboard untuk mengelompokkan resource secara logis.
+    app.kubernetes.io/name: user-svc
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: gomonorepo
+
+spec:
+  # replicas: berapa Pod yang harus selalu jalan.
+  # Di production: minimal 2 untuk high availability.
+  # Jika satu node mati, Pod yang satunya masih melayani request
+  # sementara Kubernetes membuat Pod baru di node lain.
+  replicas: 2
+
+  # selector menentukan Pod mana yang "diurus" oleh Deployment ini.
+  # Kubernetes mencari Pod yang memiliki label yang cocok dengan selector ini.
+  # PENTING: selector.matchLabels HARUS cocok dengan template.metadata.labels di bawah.
+  selector:
+    matchLabels:
+      app: user-svc
+
+  # strategy mendefinisikan bagaimana cara melakukan update (rolling update).
+  # RollingUpdate adalah default dan terbaik untuk production:
+  # Kubernetes mengganti Pod lama satu per satu, memastikan selalu ada Pod yang melayani.
+  # Kebalikannya adalah Recreate: matikan semua, lalu buat baru — menyebabkan downtime!
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # maxUnavailable: berapa Pod boleh tidak tersedia saat update.
+      # "0" berarti zero-downtime deployment — selalu ada Pod yang siap melayani.
+      maxUnavailable: 0
+      # maxSurge: berapa Pod ekstra boleh dibuat sementara saat update.
+      # "1" berarti Kubernetes buat 1 Pod baru sebelum hapus 1 Pod lama.
+      maxSurge: 1
+
+  template:
+    # Template ini adalah "cetakan" untuk setiap Pod yang dibuat.
+    metadata:
+      labels:
+        # Label ini HARUS cocok dengan selector.matchLabels di atas.
+        app: user-svc
+        version: "1.0.0"
+    spec:
+      # terminationGracePeriodSeconds: waktu yang diberikan ke Pod untuk
+      # menyelesaikan request yang sedang berjalan sebelum di-force kill.
+      # Ini yang membuat graceful shutdown kita di main.go efektif.
+      # Kubernetes kirim SIGTERM → Pod mulai shutdown (10 detik di main.go) →
+      # setelah 30 detik, Kubernetes kirim SIGKILL (force kill).
+      # Pastikan nilai ini LEBIH BESAR dari timeout di main.go.
+      terminationGracePeriodSeconds: 30
+
+      # Distribusi Pod secara merata antar node (Anti-Affinity).
+      # Tanpa ini, Kubernetes mungkin menaruh kedua Pod di node yang sama —
+      # jika node itu mati, kedua Pod mati bersamaan. Dengan topologySpreadConstraints,
+      # Kubernetes berusaha menaruh Pod di node yang berbeda.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: user-svc
+
+      containers:
+        - name: user-svc
+          # Image ini akan di-override oleh Kustomize overlay untuk development.
+          # Di base, kita pakai image dari registry. Di development local,
+          # kita pakai image yang di-build secara lokal.
+          image: ghcr.io/semmidev/gomonorepo/user-svc:latest
+
+          ports:
+            - name: http    # Nama port penting! Service bisa referensi by name, bukan angka.
+              containerPort: 8080
+              protocol: TCP
+            - name: grpc
+              containerPort: 9090
+              protocol: TCP
+
+          # Environment variables dari ConfigMap dan Secret.
+          # Kita TIDAK hardcode nilai di sini — diambil dari ConfigMap.
+          # Ini mengikuti 12-Factor App: config dipisah dari code.
+          env:
+            - name: HTTP_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: user-svc-config
+                  key: HTTP_PORT
+            - name: GRPC_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: user-svc-config
+                  key: GRPC_PORT
+            - name: APP_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: user-svc-config
+                  key: APP_ENV
+
+          # resources adalah kontrak antara Pod dan Kubernetes scheduler.
+          #
+          # requests: "Aku butuh minimal sekian resource untuk bisa jalan."
+          #   Kubernetes scheduler menggunakan ini untuk memutuskan di node mana Pod ditempatkan.
+          #   Jika tidak ada node dengan resource sebesar ini, Pod akan Pending (tidak dijadwalkan).
+          #
+          # limits: "Jangan biarkan aku memakai lebih dari ini."
+          #   Jika CPU melebihi limit: container di-throttle (diperlambat).
+          #   Jika memory melebihi limit: container di-OOMKill (di-restart).
+          #
+          # Best practice: set requests = 50-70% dari limits.
+          # Jangan set limits terlalu rendah atau app akan sering di-throttle.
+          resources:
+            requests:
+              memory: "64Mi"   # 64 Megabytes
+              cpu: "100m"      # 100 millicores = 0.1 CPU core
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+
+          # livenessProbe: "Apakah container ini masih hidup (tidak hang/deadlock)?"
+          # Jika probe ini gagal beberapa kali berturut-turut, Kubernetes RESTART container.
+          # Gunakan endpoint yang benar-benar memverifikasi aplikasi berjalan normal,
+          # BUKAN hanya mengembalikan 200 OK tanpa cek apapun.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http        # Referensi nama port, bukan angka — lebih robust
+            initialDelaySeconds: 10   # Tunggu 10 detik setelah container start sebelum mulai probe
+            periodSeconds: 10         # Cek setiap 10 detik
+            failureThreshold: 3       # Gagal 3 kali berturut-turut → restart container
+            timeoutSeconds: 5
+
+          # readinessProbe: "Apakah container ini SIAP menerima traffic?"
+          # Jika probe ini gagal, Kubernetes TIDAK mengirim traffic baru ke Pod ini,
+          # tapi tidak me-restart-nya. Pod yang tidak ready dikeluarkan dari Service endpoints.
+          #
+          # Perbedaan liveness vs readiness:
+          #   - liveness: "Apakah masih hidup?" (gagal → restart)
+          #   - readiness: "Apakah siap terima request?" (gagal → stop send traffic)
+          #
+          # Contoh kapan readiness gagal tapi liveness OK:
+          # Saat startup, app perlu 5 detik untuk warm up (load cache, dll).
+          # Selama 5 detik itu, readiness gagal (jangan kirim traffic dulu),
+          # tapi liveness OK (app masih hidup, hanya belum siap).
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 2
+            successThreshold: 1
+            timeoutSeconds: 3
+
+          # startupProbe: khusus untuk saat container baru pertama kali start.
+          # Jika app butuh waktu lama untuk start (misalnya perlu migrasi database),
+          # startupProbe memberi waktu ekstra TANPA mempengaruhi liveness/readiness probe.
+          # Kalau tidak ada startupProbe, liveness probe akan restart container sebelum sempat ready.
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            failureThreshold: 30    # Beri waktu 30 * 2 = 60 detik untuk startup
+            periodSeconds: 2
+
+          # Security context untuk container: prinsip "least privilege"
+          securityContext:
+            # Jalankan sebagai non-root user (UID 65532 = "nonroot" di distroless)
+            runAsNonRoot: true
+            runAsUser: 65532
+            # Filesystem read-only: container tidak bisa menulis ke disk
+            # (kecuali ke volume yang di-mount secara eksplisit)
+            readOnlyRootFilesystem: true
+            # Larang privilege escalation: process di dalam container tidak bisa
+            # mendapatkan privileges lebih tinggi dari parent process-nya
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL   # Drop semua Linux capabilities
+
+      # Security context untuk Pod (level Pod, bukan container)
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault  # Gunakan seccomp profile default runtime

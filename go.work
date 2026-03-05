@@ -1,0 +1,19 @@
+// go.work adalah "pintu masuk" monorepo kita.
+// File ini memberitahu Go toolchain: "semua module di sini adalah satu kesatuan workspace".
+// Dengan ini, perubahan di satu module langsung terlihat oleh module lain
+// TANPA perlu publish ke registry dulu. Ini game-changer untuk development!
+
+go 1.26.0
+
+// "use" mendaftarkan setiap module ke workspace.
+// Go akan menggunakan source code lokal ini, bukan dari module cache.
+use (
+	./gen/go
+	./services/user-svc
+	./services/order-svc
+	./shared
+)
+
+// CATATAN: go.work TIDAK boleh di-commit jika kamu ingin setiap service
+// bisa di-deploy secara independen. Tambahkan ke .gitignore jika perlu.
+// Tapi untuk monorepo yang di-deploy bersama, boleh di-commit.

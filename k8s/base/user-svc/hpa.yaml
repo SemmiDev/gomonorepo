@@ -1,0 +1,73 @@
+# k8s/base/user-svc/hpa.yaml
+#
+# HorizontalPodAutoscaler (HPA) secara otomatis menambah atau mengurangi
+# jumlah replica berdasarkan beban (CPU, memory, atau custom metrics).
+#
+# Cara kerja HPA:
+# HPA controller (berjalan di control plane) memonitor metrik setiap 15 detik.
+# Jika rata-rata CPU semua Pod melebihi 70%, dia menambah replica.
+# Jika rata-rata CPU turun jauh di bawah 70%, dia mengurangi replica (scale down).
+#
+# Formula scale-up:
+#   desired_replicas = ceil(current_replicas * (current_metric / target_metric))
+#   Contoh: 2 replicas, CPU 140% dari target → ceil(2 * 140/70) = ceil(4) = 4 replicas
+#
+# PENTING: HPA membutuhkan Metrics Server terinstall di cluster!
+# Di Docker Desktop Kubernetes: bisa diinstall dengan:
+#   kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+# Lalu patch untuk menambahkan --kubelet-insecure-tls flag (karena local cluster tidak pakai TLS yang valid)
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: user-svc-hpa
+  namespace: gomonorepo
+spec:
+  # scaleTargetRef: HPA mengatur Deployment mana?
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: user-svc
+
+  minReplicas: 2    # Minimum selalu 2 untuk high availability
+  maxReplicas: 10   # Maximum 10 replica saat load tinggi
+
+  metrics:
+    # Scale berdasarkan CPU usage
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          # Jika rata-rata CPU semua Pod melebihi 70% dari request CPU-nya,
+          # HPA akan menambah replica.
+          # Nilai 70% adalah sweet spot: tidak terlalu agresif, tidak terlalu lambat.
+          averageUtilization: 70
+
+    # Scale berdasarkan memory usage (opsional tapi recommended untuk apps yang memory-intensive)
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+  behavior:
+    # Konfigurasi perilaku scale-up dan scale-down
+    scaleUp:
+      # stabilizationWindowSeconds: tunggu 30 detik sebelum scale-up lagi.
+      # Ini mencegah "flapping" — naik-turun terus-menerus karena spike sesaat.
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Pods
+          value: 2          # Maksimal tambah 2 Pod sekaligus
+          periodSeconds: 60
+    scaleDown:
+      # Scale-down lebih konservatif: tunggu 5 menit sebelum scale-down.
+      # Ini karena scale-down yang terlalu agresif bisa menyebabkan request drop
+      # jika traffic naik lagi dengan cepat.
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1          # Kurangi maksimal 1 Pod setiap 60 detik
+          periodSeconds: 60

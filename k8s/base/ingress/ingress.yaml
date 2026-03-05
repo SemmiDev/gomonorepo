@@ -1,0 +1,95 @@
+# k8s/base/ingress/ingress.yaml
+#
+# Ingress adalah "reverse proxy" yang dikelola Kubernetes.
+# Dia menjawab pertanyaan: "Bagaimana traffic dari luar cluster sampai ke Service kita?"
+#
+# Tanpa Ingress, satu-satunya cara mengekspose service adalah NodePort atau LoadBalancer.
+# NodePort kurang elegan (pakai port random 30000-32767).
+# LoadBalancer di cloud provider biayanya mahal (satu LB per service).
+#
+# Dengan Ingress, SATU LoadBalancer bisa melayani BANYAK service berdasarkan:
+#   1. Host-based routing: api.user.local → user-svc, api.order.local → order-svc
+#   2. Path-based routing: /api/v1/users → user-svc, /api/v1/orders → order-svc
+#
+# PENTING: Ingress resource saja tidak cukup! Kamu juga butuh Ingress Controller
+# — sebuah Pod yang membaca Ingress resources dan mengkonfigurasi reverse proxy-nya.
+# Yang paling populer: nginx-ingress-controller, traefik, kong.
+#
+# Untuk Docker Desktop Kubernetes, kita install nginx-ingress-controller.
+# Lihat skrip setup di k8s/scripts/install-prerequisites.sh
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gomonorepo-ingress
+  namespace: gomonorepo
+  labels:
+    app.kubernetes.io/part-of: gomonorepo
+  annotations:
+    # Annotation ini memberitahu Ingress Controller cara berperilaku.
+    # Nilai "nginx" memberitahu cluster untuk menggunakan nginx ingress controller.
+    kubernetes.io/ingress.class: "nginx"
+
+    # Konfigurasi nginx-specific:
+    # Ukuran maksimal request body (untuk upload file, dll)
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    # Timeout untuk koneksi ke backend service
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
+    # Aktifkan CORS untuk development (agar browser bisa akses dari frontend)
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+
+spec:
+  # ingressClassName: cara modern untuk memilih Ingress Controller (vs annotation di atas)
+  # Gunakan salah satu: annotation ATAU ingressClassName, tidak perlu keduanya.
+  # ingressClassName: nginx
+
+  rules:
+    # ── Rule untuk user-svc ──────────────────────────────────────────────
+    # Semua request ke host "user.gomonorepo.local" diteruskan ke Service user-svc.
+    # Di local development, kita tambahkan entry di /etc/hosts:
+    # 127.0.0.1 user.gomonorepo.local
+    - host: user.gomonorepo.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix   # "Prefix" cocokkan semua path yang diawali /
+            backend:
+              service:
+                name: user-svc
+                port:
+                  name: http   # Referensi nama port dari Service user-svc
+
+    # ── Rule untuk order-svc ─────────────────────────────────────────────
+    - host: order.gomonorepo.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: order-svc
+                port:
+                  name: http
+
+    # ── Alternatif: Path-based routing di satu host ───────────────────────
+    # Jika kamu prefer satu host dengan path berbeda, uncomment ini:
+    # - host: api.gomonorepo.local
+    #   http:
+    #     paths:
+    #       - path: /api/v1/users
+    #         pathType: Prefix
+    #         backend:
+    #           service:
+    #             name: user-svc
+    #             port:
+    #               name: http
+    #       - path: /api/v1/orders
+    #         pathType: Prefix
+    #         backend:
+    #           service:
+    #             name: order-svc
+    #             port:
+    #               name: http

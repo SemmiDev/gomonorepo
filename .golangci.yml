@@ -1,0 +1,82 @@
+# .golangci.yml — Konfigurasi golangci-lint
+#
+# golangci-lint adalah meta-linter yang menjalankan BANYAK linter sekaligus
+# secara paralel. Ini jauh lebih cepat daripada menjalankan setiap linter satu per satu.
+#
+# Untuk melihat semua linter yang tersedia: golangci-lint linters
+# Dokumentasi: https://golangci-lint.run/usage/linters/
+
+# ── Konfigurasi Run ──────────────────────────────────────────────────────
+run:
+  timeout: 5m # Timeout keseluruhan
+  go: "1.26"
+  modules-download-mode: readonly # Jangan download module baru saat lint
+
+# ── Linters yang Diaktifkan ──────────────────────────────────────────────
+linters:
+  # Nonaktifkan semua linter default dulu, lalu aktifkan yang kita mau
+  # agar konfigurasi eksplisit dan predictable
+  disable-all: true
+  enable:
+    # ── Correctness ──
+    - errcheck # Pastikan semua error dicek. Sangat penting!
+    - gosimple # Saran simplifikasi kode
+    - govet # Memeriksa kesalahan umum di Go (shadowed variables, dll)
+    - ineffassign # Deteksi assignment yang tidak pernah dipakai
+    - staticcheck # Banyak static analysis checks
+    - unused # Deteksi kode yang tidak pernah dipakai
+
+    # ── Style ──
+    - gofmt # Pastikan kode ter-format dengan gofmt
+    - goimports # Seperti gofmt + auto-organize imports
+
+    # ── Bugs ──
+    - bodyclose # Pastikan response.Body selalu ditutup (mencegah memory leak)
+    - contextcheck # Gunakan context yang benar di dalam fungsi
+    - noctx # Jangan gunakan http.Get tanpa context (tidak bisa di-cancel)
+    - rowserrcheck # Cek error pada rows.Err() di database queries
+
+    # ── Performance ──
+    - prealloc # Saran pre-alokasi slice agar lebih efisien
+
+    # ── Security ──
+    - gosec # Deteksi security issues (hardcoded secrets, SQL injection, dll)
+
+    # ── Maintainability ──
+    - cyclop # Hitung cyclomatic complexity (ukuran kerumitan fungsi)
+    - gocognit # Cognitive complexity (lebih manusiawi dari cyclomatic)
+    - godot # Pastikan komentar diakhiri titik
+    - misspell # Koreksi typo dalam komentar dan string
+
+# ── Konfigurasi Per-Linter ────────────────────────────────────────────────
+linters-settings:
+  # Cyclomatic complexity: ukuran berapa banyak cabang (if/for/switch) dalam satu fungsi.
+  # Nilai >10 biasanya indikasi fungsi perlu di-refactor jadi lebih kecil.
+  cyclop:
+    max-complexity: 15 # Sedikit longgar untuk monorepo ini
+
+  # Cognitive complexity: lebih manusiawi, memperhitungkan nesting.
+  gocognit:
+    min-complexity: 20
+
+  gosec:
+    excludes:
+      - G104 # Jangan error untuk unhandled error (sudah covered oleh errcheck)
+
+# ── Exclude Rules ─────────────────────────────────────────────────────────
+issues:
+  exclude-rules:
+    # Jangan periksa generated code dari protobuf
+    - path: "gen/"
+      linters:
+        - all
+
+    # Test files boleh sedikit lebih longgar
+    - path: "_test\\.go"
+      linters:
+        - errcheck
+        - gosec
+
+  # Tampilkan maksimal 50 issues per linter
+  max-issues-per-linter: 50
+  max-same-issues: 10

@@ -1,0 +1,35 @@
+# buf.yaml - Konfigurasi utama Buf untuk directory proto/
+# Buf adalah pengganti modern untuk protoc yang jauh lebih developer-friendly.
+# Keunggulan Buf vs protoc mentah:
+#   1. Tidak perlu atur PATH protoc plugin secara manual
+#   2. Built-in linting & breaking change detection
+#   3. BSR (Buf Schema Registry) untuk berbagi proto antar tim
+#   4. Konfigurasi sederhana via YAML
+
+version: v2
+
+# Modules mendefinisikan root dari proto files kita.
+# Buf akan mencari semua .proto files di bawah direktori ini.
+modules:
+  - path: .
+    name: buf.build/semmidev/gomonorepo  # Nama unik di BSR (opsional jika tidak push ke BSR)
+
+# Lint rules: Buf enforces best practices untuk Protobuf.
+# Ini seperti golangci-lint tapi untuk .proto files.
+lint:
+  use:
+    - DEFAULT   # Set aturan standar yang direkomendasikan oleh tim Buf
+  # Beberapa aturan penting yang ada di DEFAULT:
+  # - FIELD_NAMES_LOWER_SNAKE_CASE: field harus snake_case
+  # - MESSAGE_NAMES_PASCAL_CASE: message harus PascalCase
+  # - PACKAGE_DEFINED: setiap file harus punya package
+  # - RPC_RESPONSE_STANDARD_NAME: response harus berakhiran "Response"
+  except:
+    - PACKAGE_VERSION_SUFFIX  # Kita pakai v1 di path, ini cukup
+
+# Breaking change detection: sangat penting untuk API stability!
+# Buf bisa mendeteksi jika kamu membuat perubahan yang TIDAK backward-compatible
+# seperti mengubah field number, menghapus field, mengubah tipe data, dll.
+breaking:
+  use:
+    - FILE  # Cek breaking changes di level file
