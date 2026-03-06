@@ -1,6 +1,6 @@
 # Go Monorepo — Deep Dive Guide
 
-Panduan lengkap monorepo Go dengan `go work`
+Panduan lengkap monorepo Go dengan `go work` dan `bazel`
 
 ---
 
