@@ -9,9 +9,10 @@ Panduan lengkap monorepo Go dengan `go work` dan `bazel`
 1. [Apa itu Monorepo?](#1-apa-itu-monorepo)
 2. [Kenapa Go Workspaces?](#2-kenapa-go-workspaces)
 3. [Struktur Project](#3-struktur-project)
-4. [Setup dari Nol](#4-setup-dari-nol)
-5. [Memahami Setiap Komponen](#5-memahami-setiap-komponen)
-6. [Development Workflow](#6-development-workflow)
+4. [Setup dari Nol (Go Workspaces)](#4-setup-dari-nol-go-workspaces)
+5. [Setup dari Nol (Bazel)](#5-setup-dari-nol-bazel)
+6. [Memahami Setiap Komponen](#6-memahami-setiap-komponen)
+7. [Development Workflow](#7-development-workflow)
 7. [Deployment](#7-deployment)
 8. [Best Practices](#8-best-practices)
 9. [Bazel Build System](#9-bazel-build-system)
@@ -131,7 +132,7 @@ Perhatikan pola `cmd/server/main.go` dan `internal/`. Ini adalah struktur standa
 
 ---
 
-## 4. Setup dari Nol
+## 4. Setup dari Nol (Go Workspaces)
 
 ### Prasyarat
 
@@ -206,7 +207,96 @@ make run-order
 
 ---
 
-## 5. Memahami Setiap Komponen
+## 5. Setup dari Nol (Bazel)
+
+Jika kamu ingin mereplikasi setup Bazel Bzlmod dari awal (misal di proyek lain atau untuk belajar), berikut adalah langkah-langkah detailnya:
+
+### Langkah 1: Buat Konfigurasi Root (`MODULE.bazel`)
+Di root monorepo, buat file `MODULE.bazel` (Bazel 8 default menggunakan Bzlmod):
+
+```starlark
+module(
+    name = "gomonorepo",
+    version = "1.0.0",
+)
+
+bazel_dep(name = "rules_go", version = "0.60.0")
+bazel_dep(name = "gazelle", version = "0.47.0")
+
+go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
+go_sdk.download(version = "1.26.0") # Download Go SDK otomatis
+
+go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
+# Integrasi mulus Gazelle dengan go.work kita
+go_deps.from_file(go_work = "//:go.work")
+use_repo(go_deps)
+```
+
+### Langkah 2: Buat Root `BUILD.bazel` & Konfigurasi Gazelle
+File ini berfungsi sebagai titik masuk / launcher tool `gazelle`. Buat `BUILD.bazel` di root:
+
+```starlark
+load("@gazelle//:def.bzl", "gazelle")
+
+# gazelle:prefix github.com/username/monorepo  <-- SESUAIKAN DENGAN NAMA MODUL KAMU
+# gazelle:exclude shared/go.mod                <-- EXCLUDE agar sub-module terdeteksi
+# gazelle:exclude services/user-svc/go.mod     <-- EXCLUDE go.mod lainnya
+# gazelle:proto disable                        <-- Mencegah konflik dengan buf/protoc
+gazelle(name = "gazelle")
+```
+
+### Langkah 3: Optimasi Editor dan CLI
+
+1. Buat `.bazelrc` untuk setup opsi default yang nyaman:
+
+```sh
+common --enable_bzlmod
+build --verbose_failures
+build --sandbox_debug
+build --show_timestamps
+```
+
+2. Buat `.bazelignore` untuk mempercepat pemindaian Bazel:
+
+```sh
+.git
+.github
+k8s
+```
+
+3. Khusus pengguna **VSCode**, buat `.vscode/settings.json` agar folder symlink Bazel tidak mengotori editor:
+
+```json
+{
+  "files.exclude": {
+    "bazel-*": true
+  }
+}
+```
+
+### Langkah 4: Tidy & Generate Build Files
+
+Jalankan urutan ini untuk mengunduh dependency dan me-generate semua file build di setiap folder Go milikmu:
+
+```bash
+# 1. Rapikan file konfigurasi macro MODULE.bazel
+bazel mod tidy
+
+# 2. Sinkronisasi dependensi (jika mengubah import di kode/go.mod)
+bazel run //:gazelle -- update-repos -from_file=go.work
+
+# 3. Generate file BUILD.bazel di semua map/folder (Inti dari Automasi Gazelle!)
+bazel run //:gazelle
+
+# 4. Verifikasi bahwa segalanya bisa dicompile
+bazel build //...
+```
+
+Voila! Proyek monorepoku sudah fully-managed oleh Bazel Bzlmod!
+
+---
+
+## 6. Memahami Setiap Komponen
 
 ### 5.1 Protobuf + Buf
 
@@ -286,7 +376,7 @@ func (r *repo) Save(ctx context.Context, user *User) (*User, error) {
 
 ---
 
-## 6. Development Workflow
+## 7. Development Workflow
 
 ### Cara Kerja go work dalam Praktek
 
@@ -335,7 +425,7 @@ grpcurl -plaintext \
 
 ---
 
-## 7. Deployment
+## 8. Deployment
 
 ### Docker Multi-Stage Build
 
@@ -376,7 +466,7 @@ Perhatikan di `docker-compose.yml`, `context: .` menunjuk ke **root monorepo**, 
 
 ---
 
-## 8. Best Practices
+## 9. Best Practices
 
 **Tentang go.work:** Putuskan apakah kamu mau commit `go.work` atau tidak. Untuk monorepo yang di-deploy bersama (semua service dalam satu repository dan di-deploy bersamaan), commit `go.work` adalah masuk akal. Untuk monorepo di mana setiap service punya release cycle terpisah, lebih baik tambahkan `go.work` ke `.gitignore` dan biarkan setiap developer generate sendiri.
 
@@ -390,7 +480,7 @@ Perhatikan di `docker-compose.yml`, `context: .` menunjuk ke **root monorepo**, 
 
 ---
 
-## 9. Bazel Build System
+## 10. Bazel Build System
 
 Projek ini sekarang menggunakan **Bazel 8** dengan fitur modern Bzlmod untuk mengelola dependency dan build system (menggantikan atau melengkapi `go work` standar).
 
@@ -426,6 +516,7 @@ Bazel memberikan build yang hermetic, reproducible, dan sangat cepat (dengan cac
 **Gazelle** adalah tool yang terintegrasi di Bazel untuk meng-generate file `BUILD.bazel` secara otomatis dari kode Go kamu.
 
 Jalankan `bazel run //:gazelle` JIKA:
+
 1. Kamu mengimport package baru di `import "..."`.
 2. Kamu membuat folder/package Go baru.
 3. Kamu menambah/menghapus file `.go`.
@@ -434,7 +525,7 @@ Jalankan `bazel run //:gazelle` JIKA:
 
 ---
 
-## 10. Referensi API
+## 11. Referensi API
 
 ### user-svc (HTTP :8080)
 
