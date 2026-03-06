@@ -1,0 +1,9 @@
+load("@gazelle//:def.bzl", "gazelle")
+
+# gazelle:prefix github.com/semmidev/gomonorepo
+# gazelle:exclude shared/go.mod
+# gazelle:exclude gen/go/go.mod
+# gazelle:exclude services/order-svc/go.mod
+# gazelle:exclude services/user-svc/go.mod
+# gazelle:proto disable
+gazelle(name = "gazelle")

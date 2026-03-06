@@ -1,0 +1,7 @@
+# Bazel 8 defaults to Bzlmod
+common --enable_bzlmod
+
+# Helpful defaults
+build --verbose_failures
+build --sandbox_debug
+build --show_timestamps

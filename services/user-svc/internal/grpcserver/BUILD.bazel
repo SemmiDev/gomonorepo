@@ -1,0 +1,15 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "grpcserver",
+    srcs = ["user_grpc_server.go"],
+    importpath = "github.com/semmidev/gomonorepo/services/user-svc/internal/grpcserver",
+    visibility = ["//services/user-svc:__subpackages__"],
+    deps = [
+        "//gen/go/user/v1:user",
+        "//services/user-svc/internal/repository",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
+        "@org_uber_go_zap//:zap",
+    ],
+)

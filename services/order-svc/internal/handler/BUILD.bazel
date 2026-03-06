@@ -1,0 +1,16 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "handler",
+    srcs = ["order_handler.go"],
+    importpath = "github.com/semmidev/gomonorepo/services/order-svc/internal/handler",
+    visibility = ["//services/order-svc:__subpackages__"],
+    deps = [
+        "//gen/go/user/v1:user",
+        "//services/order-svc/internal/repository",
+        "@com_github_go_chi_chi_v5//:chi",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
+        "@org_uber_go_zap//:zap",
+    ],
+)

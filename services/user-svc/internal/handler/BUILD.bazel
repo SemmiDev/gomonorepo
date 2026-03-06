@@ -1,0 +1,13 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "handler",
+    srcs = ["user_handler.go"],
+    importpath = "github.com/semmidev/gomonorepo/services/user-svc/internal/handler",
+    visibility = ["//services/user-svc:__subpackages__"],
+    deps = [
+        "//services/user-svc/internal/repository",
+        "@com_github_go_chi_chi_v5//:chi",
+        "@org_uber_go_zap//:zap",
+    ],
+)

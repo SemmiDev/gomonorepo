@@ -14,7 +14,8 @@ Panduan lengkap monorepo Go dengan `go work`
 6. [Development Workflow](#6-development-workflow)
 7. [Deployment](#7-deployment)
 8. [Best Practices](#8-best-practices)
-9. [Referensi API](#9-referensi-api)
+9. [Bazel Build System](#9-bazel-build-system)
+10. [Referensi API](#10-referensi-api)
 
 ---
 
@@ -389,7 +390,51 @@ Perhatikan di `docker-compose.yml`, `context: .` menunjuk ke **root monorepo**, 
 
 ---
 
-## 9. Referensi API
+## 9. Bazel Build System
+
+Projek ini sekarang menggunakan **Bazel 8** dengan fitur modern Bzlmod untuk mengelola dependency dan build system (menggantikan atau melengkapi `go work` standar).
+
+Bazel memberikan build yang hermetic, reproducible, dan sangat cepat (dengan caching) untuk scale yang besar.
+
+### Setup Dasar Bazel
+
+1. **Install Bazelisk** (rekomendasi official Bazel launcher):
+   ```bash
+   brew install bazelisk
+   # Alias bazel ke bazelisk
+   alias bazel="bazelisk"
+   ```
+
+2. **Sinkronisasi dependencies (Optional, biasanya otomatis)**:
+   ```bash
+   bazel mod tidy
+   ```
+
+### Command Penting Bazel
+
+| Command | Deskripsi |
+|---------|-----------|
+| `bazel build //...` | Build **seluruh** target (services, shared libs, dll) |
+| `bazel test //...` | Jalankan **semua** tes unit (`go test`) di workspace |
+| `bazel run //services/user-svc/cmd/server` | Build dan jalankan service tertentu |
+| `bazel run //:gazelle` | **WAJIB** dijalankan setiap kali membuat file Go baru atau mengubah import |
+| `bazel run //:gazelle -- update-repos -from_file=go.work` | Sinkronisasi external module dari `go.mod` ke `MODULE.bazel` |
+| `bazel clean --expunge` | Bersihkan total cache Bazel (berguna jika ada state kotor) |
+
+### Kapan Saya Harus Menjalankan Gazelle?
+
+**Gazelle** adalah tool yang terintegrasi di Bazel untuk meng-generate file `BUILD.bazel` secara otomatis dari kode Go kamu.
+
+Jalankan `bazel run //:gazelle` JIKA:
+1. Kamu mengimport package baru di `import "..."`.
+2. Kamu membuat folder/package Go baru.
+3. Kamu menambah/menghapus file `.go`.
+
+> **Catatan Protobuf**: Projek ini saat ini melakukan pre-compile protobuf via `buf` (ke folder `gen/go`). Gazelle otomatis di-konfigurasi (`# gazelle:proto disable`) untuk *tidak menumpuk/mengganggu* file `.pb.go` dengan target `rules_proto`.
+
+---
+
+## 10. Referensi API
 
 ### user-svc (HTTP :8080)
 
